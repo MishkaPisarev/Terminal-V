@@ -14,12 +14,12 @@ export const MarketStreamWidget = memo(function MarketStreamWidget({
     return data.change_24h >= 0 
       ? 'text-green-500' 
       : 'text-red-500'
-  }, [data?.change_24h])
+  }, [data])
 
   const changeSymbol = useMemo(() => {
     if (!data) return ''
     return data.change_24h >= 0 ? '↑' : '↓'
-  }, [data?.change_24h])
+  }, [data])
 
   if (!data) {
     return (

@@ -14,13 +14,13 @@ export const NewsSentimentWidget = memo(function NewsSentimentWidget({
     if (data.sentiment_score > 0.3) return 'text-green-500'
     if (data.sentiment_score < -0.3) return 'text-red-500'
     return 'text-yellow-500'
-  }, [data?.sentiment_score])
+  }, [data])
 
   const sentimentBarWidth = useMemo(() => {
     if (!data) return 50
     // Convert -1 to 1 range to 0-100%
     return ((data.sentiment_score + 1) / 2) * 100
-  }, [data?.sentiment_score])
+  }, [data])
 
   if (!data) {
     return (
