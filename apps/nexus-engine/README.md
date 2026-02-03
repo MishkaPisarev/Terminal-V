@@ -42,23 +42,17 @@ poetry run python broadcaster.py --interval 500
 Configure data sources via environment variables:
 
 ```bash
-# Market Stream
-export MARKET_WEBSOCKET_URL="wss://api.example.com/stream"
-export MARKET_API_KEY="your-api-key"
+# Market Stream - Symbols to track (comma-separated)
+export MARKET_SYMBOLS="BTCUSD,SPX,EURUSD,TSLA"
 
-# Macro Economic
-export MACRO_API_URL="https://api.example.com/macro"
-export MACRO_API_KEY="your-api-key"
+# Macro Economic - Region code
+export MACRO_REGION="US"
 
-# News Sentiment
-export SENTIMENT_API_URL="https://api.example.com/sentiment"
-export SENTIMENT_API_KEY="your-api-key"
-
-# Blockchain Scanner
+# Blockchain Scanner (optional)
 export BLOCKCHAIN_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/..."
 export BLOCKCHAIN_RPC_KEY="your-rpc-key"
 
-# User Activity Database
+# User Activity Database (optional)
 export DB_URL="postgresql://user:pass@localhost/dbname"
 export DB_USER="username"
 export DB_PASSWORD="password"
@@ -69,14 +63,20 @@ export REDIS_URL="redis://localhost:6379/0"
 export REDIS_CHANNEL="terminal-v:data"
 ```
 
+**Note:** Market Stream, Macro Economic, and News Sentiment work without API keys - they fetch data directly from TradingView, Google Finance, Investing.com, and FRED API.
+
 ## Current Status
 
-**All data sources are currently stubs** - they return mock data. 
+**✅ Real data sources implemented!**
 
-To implement real data fetching:
-1. Provide API keys/credentials via environment variables
-2. Update the service classes in `nexus_engine/services/` to replace stub implementations
-3. The broadcaster will automatically use the new implementations
+The Nexus Engine now fetches real data from:
+- **Market Stream**: TradingView & Google Finance (yfinance)
+- **Macro Economic**: FRED API (Federal Reserve) & Investing.com
+- **News Sentiment**: Investing.com with keyword-based sentiment analysis
+- **Blockchain**: RPC endpoint (requires configuration)
+- **User Activity**: Internal database (requires configuration)
+
+See `DATA_SOURCES.md` for detailed information about each source.
 
 ## Data Structure
 
