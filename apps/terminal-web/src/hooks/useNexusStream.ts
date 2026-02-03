@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { AggregatedData } from '../types/nexus'
+import { generateMockData } from '../utils/mockData'
 
 interface UseNexusStreamOptions {
   apiUrl?: string
@@ -38,7 +39,9 @@ export function useNexusStream(
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttemptsRef = useRef(0)
+  const mockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isMountedRef = useRef(true)
+  const isDemoModeRef = useRef(false)
 
   // Optimized data update - only update if data actually changed
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -64,11 +67,35 @@ export function useNexusStream(
 
     // Don't attempt connection if no API URL is provided (production without backend)
     if (!apiUrl) {
-      console.warn('Nexus API URL not configured. WebSocket connection skipped.')
-      setError(new Error('API URL not configured'))
+      // Run in demo mode with mock data
+      isDemoModeRef.current = true
       setIsConnected(false)
+      setError(new Error('API URL not configured - running in demo mode'))
+      
+      // Log informative message (only once, in development)
+      if (import.meta.env.DEV) {
+        console.log('ℹ️ Terminal-V: Running in DEMO MODE with mock data. To connect to backend, set VITE_API_URL environment variable.')
+      }
+      
+      // Generate initial mock data
+      setData(generateMockData())
+      
+      // Update mock data every 200ms to simulate real-time updates
+      mockIntervalRef.current = setInterval(() => {
+        if (isMountedRef.current) {
+          setData(generateMockData())
+        }
+      }, 200)
+      
       return
     }
+    
+    // Clear any existing mock interval
+    if (mockIntervalRef.current) {
+      clearInterval(mockIntervalRef.current)
+      mockIntervalRef.current = null
+    }
+    isDemoModeRef.current = false
 
     try {
       // Try WebSocket first (preferred for real-time)
@@ -140,6 +167,9 @@ export function useNexusStream(
       isMountedRef.current = false
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (mockIntervalRef.current) {
+        clearInterval(mockIntervalRef.current)
       }
       if (wsRef.current) {
         wsRef.current.close()
