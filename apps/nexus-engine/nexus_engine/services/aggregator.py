@@ -14,14 +14,10 @@ class DataAggregatorService:
     def __init__(
         self,
         # Market Stream config
-        websocket_url: Optional[str] = None,
-        market_api_key: Optional[str] = None,
+        market_symbols: Optional[list] = None,
         # Macro Econ config
-        macro_api_url: Optional[str] = None,
-        macro_api_key: Optional[str] = None,
-        # News Sentiment config
-        sentiment_api_url: Optional[str] = None,
-        sentiment_api_key: Optional[str] = None,
+        macro_region: str = "US",
+        # News Sentiment config (no config needed - uses Investing.com directly)
         # Blockchain config
         rpc_url: Optional[str] = None,
         rpc_key: Optional[str] = None,
@@ -33,32 +29,26 @@ class DataAggregatorService:
         Initialize Data Aggregator Service with all data sources
         
         Args:
-            websocket_url: WebSocket URL for market stream
-            market_api_key: API key for market stream
-            macro_api_url: REST API URL for macroeconomic data
-            macro_api_key: API key for macroeconomic API
-            sentiment_api_url: AI service URL for sentiment analysis
-            sentiment_api_key: API key for sentiment service
+            market_symbols: List of trading symbols to track (default: ['BTCUSD', 'SPX', 'EURUSD'])
+            macro_region: Geographic region for macroeconomic data (default: "US")
             rpc_url: RPC endpoint URL for blockchain scanner
             rpc_key: RPC authentication key
             db_url: Database connection URL for user activity
             db_credentials: Database credentials dict
         """
         # Initialize all service instances
+        # Market Stream - gets data from TradingView & Google Finance
         self.market_stream = MarketStreamService(
-            websocket_url=websocket_url,
-            api_key=market_api_key
+            symbols=market_symbols
         )
         
+        # Macro Econ - gets data from Investing.com & FRED API
         self.macro_econ = MacroEconService(
-            api_url=macro_api_url,
-            api_key=macro_api_key
+            region=macro_region
         )
         
-        self.news_sentiment = NewsSentimentService(
-            ai_api_url=sentiment_api_url,
-            api_key=sentiment_api_key
-        )
+        # News Sentiment - gets data from Investing.com
+        self.news_sentiment = NewsSentimentService()
         
         self.blockchain_scanner = BlockchainScannerService(
             rpc_url=rpc_url,
@@ -79,6 +69,7 @@ class DataAggregatorService:
         """Shutdown all data source connections"""
         await self.market_stream.disconnect()
         await self.macro_econ.close()
+        await self.news_sentiment.close()
     
     async def aggregate(self, region: str = "US", network: str = "ethereum") -> AggregatedData:
         """

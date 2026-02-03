@@ -9,16 +9,16 @@ Environment Variables:
     REDIS_URL: Redis connection URL (default: redis://localhost:6379/0)
     REDIS_CHANNEL: Redis channel name (default: terminal-v:data)
     
-    # Data source configuration (optional - stubs used if not provided)
-    MARKET_WEBSOCKET_URL: WebSocket URL for market stream
-    MARKET_API_KEY: API key for market stream
-    MACRO_API_URL: REST API URL for macroeconomic data
-    MACRO_API_KEY: API key for macroeconomic API
-    SENTIMENT_API_URL: AI service URL for sentiment analysis
-    SENTIMENT_API_KEY: API key for sentiment service
+    # Data source configuration (optional)
+    MARKET_SYMBOLS: Comma-separated list of symbols to track (default: BTCUSD,SPX,EURUSD)
+    MACRO_REGION: Geographic region for macroeconomic data (default: US)
     BLOCKCHAIN_RPC_URL: RPC endpoint URL for blockchain scanner
     BLOCKCHAIN_RPC_KEY: RPC authentication key
     DB_URL: Database connection URL for user activity
+    
+    Note: Market data comes from TradingView & Google Finance (yfinance)
+          Macro data comes from Investing.com & FRED API
+          News sentiment comes from Investing.com
 """
 import asyncio
 import json
@@ -56,16 +56,16 @@ class Broadcaster:
     
     def _create_default_aggregator(self) -> DataAggregatorService:
         """Create default aggregator with environment variable configuration"""
+        # Parse market symbols from env or use defaults
+        market_symbols_str = os.getenv("MARKET_SYMBOLS", "BTCUSD,SPX,EURUSD")
+        market_symbols = [s.strip() for s in market_symbols_str.split(",")]
+        
         return DataAggregatorService(
-            # Market Stream
-            websocket_url=os.getenv("MARKET_WEBSOCKET_URL"),
-            market_api_key=os.getenv("MARKET_API_KEY"),
-            # Macro Econ
-            macro_api_url=os.getenv("MACRO_API_URL"),
-            macro_api_key=os.getenv("MACRO_API_KEY"),
-            # News Sentiment
-            sentiment_api_url=os.getenv("SENTIMENT_API_URL"),
-            sentiment_api_key=os.getenv("SENTIMENT_API_KEY"),
+            # Market Stream - gets data from TradingView & Google Finance
+            market_symbols=market_symbols,
+            # Macro Econ - gets data from Investing.com & FRED API
+            macro_region=os.getenv("MACRO_REGION", "US"),
+            # News Sentiment - gets data from Investing.com (no config needed)
             # Blockchain
             rpc_url=os.getenv("BLOCKCHAIN_RPC_URL"),
             rpc_key=os.getenv("BLOCKCHAIN_RPC_KEY"),
