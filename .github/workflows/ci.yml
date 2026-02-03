@@ -43,7 +43,7 @@ jobs:
         run: pnpm --filter terminal-web build
       
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terminal-web-dist
           path: apps/terminal-web/dist
