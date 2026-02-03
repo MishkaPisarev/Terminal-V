@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/' : '/',
+  base: '/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -12,6 +12,7 @@ export default defineConfig({
       '@/lib': path.resolve(__dirname, './src/lib'),
     }
   },
+  publicDir: 'public',
   build: {
     rollupOptions: {
       output: {
