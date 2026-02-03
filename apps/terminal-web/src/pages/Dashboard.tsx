@@ -30,9 +30,20 @@ export const Dashboard = memo(function Dashboard() {
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4">
-            <div className="text-red-500 font-mono text-sm">
-              ERROR: {error.message}
+          <div className={`border rounded-lg p-4 ${
+            error.message.includes('not configured') || error.message.includes('Max reconnection')
+              ? 'bg-yellow-500/10 border-yellow-500/50'
+              : 'bg-red-500/10 border-red-500'
+          }`}>
+            <div className={`font-mono text-sm ${
+              error.message.includes('not configured') || error.message.includes('Max reconnection')
+                ? 'text-yellow-500'
+                : 'text-red-500'
+            }`}>
+              {error.message.includes('not configured') 
+                ? '⚠️ Backend API not configured. Running in demo mode with mock data.'
+                : `ERROR: ${error.message}`
+              }
             </div>
           </div>
         )}

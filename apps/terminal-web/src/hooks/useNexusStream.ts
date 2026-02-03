@@ -21,8 +21,12 @@ interface UseNexusStreamReturn {
 export function useNexusStream(
   options: UseNexusStreamOptions = {}
 ): UseNexusStreamReturn {
+  // Use environment variable for API URL, fallback to localhost for development
+  const defaultApiUrl = import.meta.env.VITE_API_URL || 
+    (import.meta.env.DEV ? 'http://localhost:8000' : '')
+  
   const {
-    apiUrl = 'http://localhost:8000',
+    apiUrl = defaultApiUrl,
     reconnectInterval = 3000,
     maxReconnectAttempts = 10,
   } = options
@@ -58,6 +62,14 @@ export function useNexusStream(
   const connect = useCallback(() => {
     if (!isMountedRef.current) return
 
+    // Don't attempt connection if no API URL is provided (production without backend)
+    if (!apiUrl) {
+      console.warn('Nexus API URL not configured. WebSocket connection skipped.')
+      setError(new Error('API URL not configured'))
+      setIsConnected(false)
+      return
+    }
+
     try {
       // Try WebSocket first (preferred for real-time)
       const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/nexus-stream'
@@ -77,7 +89,10 @@ export function useNexusStream(
       ws.onmessage = handleMessage
 
       ws.onerror = (event) => {
-        console.error('WebSocket error:', event)
+        // Only log error in development, suppress in production to avoid console noise
+        if (import.meta.env.DEV) {
+          console.error('WebSocket error:', event)
+        }
         setError(new Error('WebSocket connection error'))
         setIsConnected(false)
       }
