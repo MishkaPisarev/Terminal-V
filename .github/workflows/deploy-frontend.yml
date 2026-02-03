@@ -45,6 +45,8 @@ jobs:
         run: pnpm --filter @terminal-v/ui-kit build
       
       - name: Build Terminal Web
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: pnpm --filter terminal-web build
       
       - name: Setup Pages
