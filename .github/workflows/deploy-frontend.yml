@@ -3,10 +3,7 @@ name: Deploy Terminal Web
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'apps/terminal-web/**'
-      - 'packages/ui-kit/**'
-      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
