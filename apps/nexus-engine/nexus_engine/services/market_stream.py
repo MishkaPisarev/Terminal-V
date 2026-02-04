@@ -1,4 +1,4 @@
-"""Market Stream Service - TradingView & Google Finance integration"""
+"""Market Stream Service - CoinGecko, TradingView & Google Finance integration"""
 import asyncio
 import aiohttp
 import json
@@ -8,7 +8,7 @@ from nexus_engine.models.aggregated_data import MarketStreamData
 
 
 class MarketStreamService:
-    """Service for managing market stream data from TradingView and Google Finance"""
+    """Service for managing market stream data from CoinGecko, TradingView and Google Finance"""
     
     def __init__(self, symbols: Optional[list] = None):
         """
@@ -20,6 +20,13 @@ class MarketStreamService:
         self.symbols = symbols or ['BTCUSD', 'SPX', 'EURUSD']
         self._session: Optional[aiohttp.ClientSession] = None
         self._connected = False
+        # CoinGecko ID mapping for cryptocurrencies
+        self.coingecko_ids = {
+            'BTCUSD': 'bitcoin',
+            'BTC': 'bitcoin',
+            'ETHUSD': 'ethereum',
+            'ETH': 'ethereum',
+        }
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session"""
@@ -62,6 +69,53 @@ class MarketStreamService:
             return None
         except Exception as e:
             print(f"TradingView fetch error for {symbol}: {e}")
+            return None
+    
+    async def _fetch_coingecko(self, symbol: str) -> Optional[dict]:
+        """
+        Fetch cryptocurrency data from CoinGecko API (free, no API key required)
+        
+        Args:
+            symbol: Trading symbol (e.g., 'BTCUSD', 'BTC')
+            
+        Returns:
+            dict: Market data or None if failed
+        """
+        try:
+            # Check if symbol is a cryptocurrency
+            coin_id = self.coingecko_ids.get(symbol.upper())
+            if not coin_id:
+                # Try to extract coin ID from symbol
+                if 'BTC' in symbol.upper():
+                    coin_id = 'bitcoin'
+                elif 'ETH' in symbol.upper():
+                    coin_id = 'ethereum'
+                else:
+                    return None  # Not a cryptocurrency, skip CoinGecko
+            
+            session = await self._get_session()
+            url = "https://api.coingecko.com/api/v3/simple/price"
+            params = {
+                "ids": coin_id,
+                "vs_currencies": "usd",
+                "include_24hr_change": "true",
+                "include_24hr_vol": "true"
+            }
+            
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if coin_id in data:
+                        coin_data = data[coin_id]
+                        return {
+                            'price': coin_data.get('usd', 0.0),
+                            'volume': coin_data.get('usd_24h_vol', 0.0),
+                            'change_24h': coin_data.get('usd_24h_change', 0.0),
+                            'symbol': symbol
+                        }
+            return None
+        except Exception as e:
+            print(f"CoinGecko fetch error for {symbol}: {e}")
             return None
     
     async def _fetch_google_finance(self, symbol: str) -> Optional[dict]:
@@ -133,10 +187,18 @@ class MarketStreamService:
         """
         target_symbol = symbol or self.symbols[0]
         
-        # Try Google Finance first (more reliable)
-        data = await self._fetch_google_finance(target_symbol)
+        # Priority order: CoinGecko (for crypto) -> Google Finance -> TradingView
+        data = None
         
-        # Fallback to TradingView if Google Finance fails
+        # Try CoinGecko first for cryptocurrencies (free, no API key, reliable)
+        if any(crypto in target_symbol.upper() for crypto in ['BTC', 'ETH', 'CRYPTO']):
+            data = await self._fetch_coingecko(target_symbol)
+        
+        # Fallback to Google Finance (yfinance) for stocks and forex
+        if not data:
+            data = await self._fetch_google_finance(target_symbol)
+        
+        # Fallback to TradingView if both fail
         if not data:
             tv_data = await self._fetch_tradingview(target_symbol)
             if tv_data:

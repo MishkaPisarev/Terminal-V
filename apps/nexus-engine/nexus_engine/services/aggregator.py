@@ -17,7 +17,8 @@ class DataAggregatorService:
         market_symbols: Optional[list] = None,
         # Macro Econ config
         macro_region: str = "US",
-        # News Sentiment config (no config needed - uses Investing.com directly)
+        # News Sentiment config
+        newsapi_key: Optional[str] = None,
         # Blockchain config
         rpc_url: Optional[str] = None,
         rpc_key: Optional[str] = None,
@@ -31,6 +32,7 @@ class DataAggregatorService:
         Args:
             market_symbols: List of trading symbols to track (default: ['BTCUSD', 'SPX', 'EURUSD'])
             macro_region: Geographic region for macroeconomic data (default: "US")
+            newsapi_key: NewsAPI key for news sentiment (optional)
             rpc_url: RPC endpoint URL for blockchain scanner
             rpc_key: RPC authentication key
             db_url: Database connection URL for user activity
@@ -47,8 +49,10 @@ class DataAggregatorService:
             region=macro_region
         )
         
-        # News Sentiment - gets data from Investing.com
-        self.news_sentiment = NewsSentimentService()
+        # News Sentiment - gets data from NewsAPI, Reddit, and Investing.com
+        self.news_sentiment = NewsSentimentService(
+            newsapi_key=newsapi_key
+        )
         
         self.blockchain_scanner = BlockchainScannerService(
             rpc_url=rpc_url,
@@ -70,6 +74,7 @@ class DataAggregatorService:
         await self.market_stream.disconnect()
         await self.macro_econ.close()
         await self.news_sentiment.close()
+        await self.blockchain_scanner.close()
     
     async def aggregate(self, region: str = "US", network: str = "ethereum") -> AggregatedData:
         """

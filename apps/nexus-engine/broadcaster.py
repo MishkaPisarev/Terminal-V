@@ -12,13 +12,15 @@ Environment Variables:
     # Data source configuration (optional)
     MARKET_SYMBOLS: Comma-separated list of symbols to track (default: BTCUSD,SPX,EURUSD)
     MACRO_REGION: Geographic region for macroeconomic data (default: US)
-    BLOCKCHAIN_RPC_URL: RPC endpoint URL for blockchain scanner
-    BLOCKCHAIN_RPC_KEY: RPC authentication key
+    NEWSAPI_KEY: API key for NewsAPI (optional - uses Reddit/Investing.com as fallback)
+    BLOCKCHAIN_RPC_URL: Custom RPC endpoint URL (optional - uses public endpoints by default)
+    BLOCKCHAIN_RPC_KEY: RPC authentication key (optional - not needed for public endpoints)
     DB_URL: Database connection URL for user activity
     
-    Note: Market data comes from TradingView & Google Finance (yfinance)
+    Note: Market data comes from CoinGecko (crypto), TradingView & Google Finance (yfinance)
           Macro data comes from Investing.com & FRED API
-          News sentiment comes from Investing.com
+          News sentiment comes from NewsAPI, Reddit, and Investing.com
+          Blockchain data comes from Public Ethereum RPC endpoints
 """
 import asyncio
 import json
@@ -61,12 +63,13 @@ class Broadcaster:
         market_symbols = [s.strip() for s in market_symbols_str.split(",")]
         
         return DataAggregatorService(
-            # Market Stream - gets data from TradingView & Google Finance
+            # Market Stream - gets data from CoinGecko, TradingView & Google Finance
             market_symbols=market_symbols,
             # Macro Econ - gets data from Investing.com & FRED API
             macro_region=os.getenv("MACRO_REGION", "US"),
-            # News Sentiment - gets data from Investing.com (no config needed)
-            # Blockchain
+            # News Sentiment - gets data from NewsAPI, Reddit, and Investing.com
+            newsapi_key=os.getenv("NEWSAPI_KEY"),
+            # Blockchain - uses Public Ethereum RPC endpoints
             rpc_url=os.getenv("BLOCKCHAIN_RPC_URL"),
             rpc_key=os.getenv("BLOCKCHAIN_RPC_KEY"),
             # User Activity

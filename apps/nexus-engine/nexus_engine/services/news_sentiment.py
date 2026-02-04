@@ -1,6 +1,7 @@
-"""News Sentiment Service - Investing.com & Google Finance News integration"""
+"""News Sentiment Service - NewsAPI, Investing.com & Reddit integration"""
 import aiohttp
 import re
+import os
 from typing import Optional, List
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -8,10 +9,16 @@ from nexus_engine.models.aggregated_data import NewsSentimentData
 
 
 class NewsSentimentService:
-    """Service for managing news sentiment analysis from Investing.com and Google Finance"""
+    """Service for managing news sentiment analysis from NewsAPI, Investing.com and Reddit"""
     
-    def __init__(self):
-        """Initialize News Sentiment Service"""
+    def __init__(self, newsapi_key: Optional[str] = None):
+        """
+        Initialize News Sentiment Service
+        
+        Args:
+            newsapi_key: NewsAPI key (optional - can use without key for limited access)
+        """
+        self.newsapi_key = newsapi_key or os.getenv('NEWSAPI_KEY')
         self._session: Optional[aiohttp.ClientSession] = None
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -27,6 +34,74 @@ class NewsSentimentService:
         """Close HTTP session"""
         if self._session and not self._session.closed:
             await self._session.close()
+    
+    async def _fetch_newsapi(self) -> Optional[List[str]]:
+        """
+        Fetch financial news from NewsAPI (free tier: 100 requests/day)
+        
+        Returns:
+            List[str]: List of news headlines or None if failed
+        """
+        try:
+            if not self.newsapi_key:
+                # NewsAPI requires a key, skip if not available
+                return None
+            
+            session = await self._get_session()
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                "q": "bitcoin OR cryptocurrency OR stock market OR trading",
+                "language": "en",
+                "sortBy": "publishedAt",
+                "pageSize": 10,
+                "apiKey": self.newsapi_key
+            }
+            
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get('status') == 'ok' and 'articles' in data:
+                        headlines = [
+                            article.get('title', '') 
+                            for article in data['articles'][:10]
+                            if article.get('title')
+                        ]
+                        return headlines if headlines else None
+            return None
+        except Exception as e:
+            print(f"NewsAPI fetch error: {e}")
+            return None
+    
+    async def _fetch_reddit_news(self) -> Optional[List[str]]:
+        """
+        Fetch financial news from Reddit (free, no API key required)
+        
+        Returns:
+            List[str]: List of news headlines or None if failed
+        """
+        try:
+            session = await self._get_session()
+            # Fetch from r/CryptoCurrency and r/investing
+            subreddits = ['CryptoCurrency', 'investing', 'stocks']
+            headlines = []
+            
+            for subreddit in subreddits[:2]:  # Limit to 2 subreddits
+                url = f"https://www.reddit.com/r/{subreddit}/hot.json"
+                headers = {"User-Agent": "Terminal-V/1.0"}
+                
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if 'data' in data and 'children' in data['data']:
+                            for post in data['data']['children'][:5]:  # Top 5 posts
+                                title = post.get('data', {}).get('title', '')
+                                if title and len(title) > 20:
+                                    headlines.append(title)
+            
+            return headlines if headlines else None
+        except Exception as e:
+            print(f"Reddit fetch error: {e}")
+            return None
     
     async def _fetch_investing_news(self) -> Optional[List[str]]:
         """
@@ -120,10 +195,15 @@ class NewsSentimentService:
             NewsSentimentData: Sentiment analysis results
         """
         # Fetch news if not provided
+        # Priority: NewsAPI -> Reddit -> Investing.com
         if not articles:
-            articles = await self._fetch_investing_news()
+            articles = await self._fetch_newsapi()
+            if not articles:
+                articles = await self._fetch_reddit_news()
+            if not articles:
+                articles = await self._fetch_investing_news()
         
-        # If fetch failed, return mock data
+        # If all fetches failed, return mock data
         if not articles:
             return NewsSentimentData(
                 sentiment_score=0.0,
