@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { AggregatedData } from '../types/nexus'
-import { generateMockData } from '../utils/mockData'
 
 interface UseNexusStreamOptions {
   apiUrl?: string
@@ -16,7 +15,7 @@ interface UseNexusStreamReturn {
 }
 
 /**
- * Custom hook for connecting to Nexus Engine Redis stream via WebSocket/SSE
+ * Custom hook for fetching aggregated data from Core API
  * Handles high-frequency updates (10 updates/sec = 200ms) with optimized state management
  */
 export function useNexusStream(
@@ -26,7 +25,7 @@ export function useNexusStream(
   const envApiUrl = import.meta.env.VITE_API_URL
   const defaultApiUrl = envApiUrl && envApiUrl.trim() !== '' 
     ? envApiUrl 
-    : (import.meta.env.DEV ? 'http://localhost:8000' : '')
+    : (import.meta.env.DEV ? 'http://localhost:8000' : 'https://terminal-v-api.onrender.com')
   
   const {
     apiUrl = defaultApiUrl,
@@ -34,146 +33,76 @@ export function useNexusStream(
     maxReconnectAttempts = 10,
   } = options
 
-  // Determine if we should run in demo mode (no API URL configured)
-  const shouldUseDemoMode = !apiUrl || apiUrl.trim() === ''
-
-  // Initialize with mock data if in demo mode
-  const [data, setData] = useState<AggregatedData | null>(() => {
-    // Use function initializer to ensure mock data is generated only once
-    if (shouldUseDemoMode) {
-      return generateMockData()
-    }
-    return null
-  })
+  const [data, setData] = useState<AggregatedData | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const [error, setError] = useState<Error | null>(() => {
-    if (shouldUseDemoMode) {
-      return new Error('API URL not configured - running in demo mode')
-    }
-    return null
-  })
+  const [error, setError] = useState<Error | null>(null)
 
-  const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttemptsRef = useRef(0)
-  const mockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const fetchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isMountedRef = useRef(true)
-  const isDemoModeRef = useRef(false)
 
-  // Optimized data update - only update if data actually changed
-  const handleMessage = useCallback((event: MessageEvent) => {
-    try {
-      const parsed = JSON.parse(event.data) as AggregatedData
-      
-      // Use functional update to avoid stale closures
-      setData((prevData) => {
-        // Only update if data actually changed (prevent unnecessary re-renders)
-        if (prevData?.aggregated_at === parsed.aggregated_at) {
-          return prevData
-        }
-        return parsed
-      })
-    } catch (err) {
-      console.error('Failed to parse Nexus stream data:', err)
-      setError(err instanceof Error ? err : new Error('Parse error'))
-    }
-  }, [])
-
-  const connect = useCallback(() => {
-    if (!isMountedRef.current) return
-
-    // Don't attempt connection if no API URL is provided (production without backend)
-    if (!apiUrl || apiUrl.trim() === '') {
-      // Run in demo mode with mock data
-      isDemoModeRef.current = true
-      setIsConnected(false)
-      setError(new Error('API URL not configured - running in demo mode'))
-      
-      // Log informative message (only once, in development)
-      if (import.meta.env.DEV) {
-        console.log('ℹ️ Terminal-V: Running in DEMO MODE with mock data. To connect to backend, set VITE_API_URL environment variable.')
-      }
-      
-      // Generate initial mock data (always update to ensure fresh data)
-      setData(generateMockData())
-      
-      // Update mock data every 200ms to simulate real-time updates
-      if (mockIntervalRef.current) {
-        clearInterval(mockIntervalRef.current)
-      }
-      mockIntervalRef.current = setInterval(() => {
-        if (isMountedRef.current) {
-          setData(generateMockData())
-        }
-      }, 200)
-      
-      return
-    }
+  // Fetch data from REST API
+  const fetchData = useCallback(async () => {
+    if (!apiUrl || !isMountedRef.current) return
     
-    // Clear any existing mock interval
-    if (mockIntervalRef.current) {
-      clearInterval(mockIntervalRef.current)
-      mockIntervalRef.current = null
-    }
-    isDemoModeRef.current = false
-
     try {
-      // Try WebSocket first (preferred for real-time)
-      const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/nexus-stream'
-      const ws = new WebSocket(wsUrl)
-
-      ws.onopen = () => {
-        if (!isMountedRef.current) {
-          ws.close()
-          return
-        }
+      const response = await fetch(`${apiUrl}/api/aggregated?symbol=BTCUSD`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const aggregatedData = await response.json() as AggregatedData
+      
+      if (isMountedRef.current) {
+        setData(aggregatedData)
         setIsConnected(true)
         setError(null)
         reconnectAttemptsRef.current = 0
-        console.log('✓ Connected to Nexus stream')
       }
-
-      ws.onmessage = handleMessage
-
-      ws.onerror = (event) => {
-        // Only log error in development, suppress in production to avoid console noise
-        if (import.meta.env.DEV) {
-          console.error('WebSocket error:', event)
-        }
-        setError(new Error('WebSocket connection error'))
-        setIsConnected(false)
-      }
-
-      ws.onclose = () => {
-        if (!isMountedRef.current) return
-        
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Failed to fetch data'))
         setIsConnected(false)
         
         // Attempt reconnection
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect()
+            fetchData()
           }, reconnectInterval)
-        } else {
-          setError(new Error('Max reconnection attempts reached'))
         }
       }
-
-      wsRef.current = ws
-    } catch (err) {
-      console.error('Failed to create WebSocket:', err)
-      setError(err instanceof Error ? err : new Error('Connection failed'))
-      setIsConnected(false)
-
-      // Fallback: Try SSE if WebSocket fails
-      // Note: SSE implementation would go here if needed
     }
-  }, [apiUrl, reconnectInterval, maxReconnectAttempts, handleMessage])
+  }, [apiUrl, reconnectInterval, maxReconnectAttempts])
+
+  const connect = useCallback(() => {
+    if (!isMountedRef.current) return
+
+    if (!apiUrl || apiUrl.trim() === '') {
+      setError(new Error('API URL not configured'))
+      setIsConnected(false)
+      return
+    }
+    
+    // Clear any existing interval
+    if (fetchIntervalRef.current) {
+      clearInterval(fetchIntervalRef.current)
+    }
+    
+    // Fetch immediately
+    fetchData()
+    
+    // Set up polling every 200ms for real-time updates
+    fetchIntervalRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        fetchData()
+      }
+    }, 200)
+  }, [apiUrl, fetchData])
 
   const reconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close()
+    if (fetchIntervalRef.current) {
+      clearInterval(fetchIntervalRef.current)
     }
     reconnectAttemptsRef.current = 0
     connect()
@@ -188,11 +117,8 @@ export function useNexusStream(
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }
-      if (mockIntervalRef.current) {
-        clearInterval(mockIntervalRef.current)
-      }
-      if (wsRef.current) {
-        wsRef.current.close()
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current)
       }
     }
   }, [connect])

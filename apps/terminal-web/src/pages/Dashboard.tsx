@@ -29,17 +29,7 @@ export const Dashboard = memo(function Dashboard() {
           </div>
         </div>
 
-        {error && error.message.includes('demo mode') && (
-          <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-4">
-            <div className="text-blue-400 font-mono text-sm">
-              ℹ️ DEMO MODE: Backend API not configured. Displaying mock data. 
-              <span className="text-brand-text-muted ml-2">
-                To connect to real backend, set VITE_API_URL environment variable.
-              </span>
-            </div>
-          </div>
-        )}
-        {error && !error.message.includes('demo mode') && (
+        {error && (
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-4">
             <div className="text-red-500 font-mono text-sm">
               ERROR: {error.message}
