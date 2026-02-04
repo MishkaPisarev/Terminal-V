@@ -23,8 +23,10 @@ export function useNexusStream(
   options: UseNexusStreamOptions = {}
 ): UseNexusStreamReturn {
   // Use environment variable for API URL, fallback to localhost for development
-  const defaultApiUrl = import.meta.env.VITE_API_URL || 
-    (import.meta.env.DEV ? 'http://localhost:8000' : '')
+  const envApiUrl = import.meta.env.VITE_API_URL
+  const defaultApiUrl = envApiUrl && envApiUrl.trim() !== '' 
+    ? envApiUrl 
+    : (import.meta.env.DEV ? 'http://localhost:8000' : '')
   
   const {
     apiUrl = defaultApiUrl,
@@ -32,9 +34,24 @@ export function useNexusStream(
     maxReconnectAttempts = 10,
   } = options
 
-  const [data, setData] = useState<AggregatedData | null>(null)
+  // Determine if we should run in demo mode (no API URL configured)
+  const shouldUseDemoMode = !apiUrl || apiUrl.trim() === ''
+
+  // Initialize with mock data if in demo mode
+  const [data, setData] = useState<AggregatedData | null>(() => {
+    // Use function initializer to ensure mock data is generated only once
+    if (shouldUseDemoMode) {
+      return generateMockData()
+    }
+    return null
+  })
   const [isConnected, setIsConnected] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const [error, setError] = useState<Error | null>(() => {
+    if (shouldUseDemoMode) {
+      return new Error('API URL not configured - running in demo mode')
+    }
+    return null
+  })
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -66,7 +83,7 @@ export function useNexusStream(
     if (!isMountedRef.current) return
 
     // Don't attempt connection if no API URL is provided (production without backend)
-    if (!apiUrl) {
+    if (!apiUrl || apiUrl.trim() === '') {
       // Run in demo mode with mock data
       isDemoModeRef.current = true
       setIsConnected(false)
@@ -77,10 +94,13 @@ export function useNexusStream(
         console.log('ℹ️ Terminal-V: Running in DEMO MODE with mock data. To connect to backend, set VITE_API_URL environment variable.')
       }
       
-      // Generate initial mock data
+      // Generate initial mock data (always update to ensure fresh data)
       setData(generateMockData())
       
       // Update mock data every 200ms to simulate real-time updates
+      if (mockIntervalRef.current) {
+        clearInterval(mockIntervalRef.current)
+      }
       mockIntervalRef.current = setInterval(() => {
         if (isMountedRef.current) {
           setData(generateMockData())
