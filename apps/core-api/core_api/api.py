@@ -12,12 +12,13 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Enable CORS with explicit headers
+# Enable CORS with explicit headers for all origins
+# This allows the frontend (terminal.valkyrris.com) to access the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
+    allow_origins=["*"],  # Allow all origins (can be restricted to specific domains in production)
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -46,7 +47,16 @@ async def shutdown():
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
     """Handle OPTIONS requests for CORS preflight"""
-    return {"status": "ok"}
+    from fastapi import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 
 @app.get("/health")

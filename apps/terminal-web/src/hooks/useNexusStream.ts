@@ -47,6 +47,9 @@ export function useNexusStream(
     if (!apiUrl || !isMountedRef.current) return
     
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+      
       const response = await fetch(`${apiUrl}/api/aggregated?symbol=BTCUSD`, {
         method: 'GET',
         headers: {
@@ -55,10 +58,13 @@ export function useNexusStream(
         },
         mode: 'cors',
         credentials: 'omit',
+        signal: controller.signal,
       })
       
+      clearTimeout(timeoutId)
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       
       const aggregatedData = await response.json() as AggregatedData
@@ -71,28 +77,39 @@ export function useNexusStream(
       }
     } catch (err) {
       if (isMountedRef.current) {
-        const errorMessage = err instanceof Error 
-          ? err.message 
-          : 'Failed to fetch data'
+        let errorMessage = 'Failed to fetch data'
         
-        // Check if it's a CORS error
-        if (errorMessage.includes('CORS') || errorMessage.includes('fetch')) {
-          setError(new Error('CORS error: Backend API may not be running or CORS not configured. Please start Core API server.'))
-        } else {
-          setError(new Error(errorMessage))
+        if (err instanceof Error) {
+          errorMessage = err.message
+          
+          // Detect specific error types
+          if (err.name === 'AbortError' || errorMessage.includes('timeout')) {
+            errorMessage = 'Request timeout: Backend API is not responding. Please check if Core API is running.'
+          } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+            errorMessage = 'Network error: Cannot connect to backend API. The server may be down or unreachable.'
+          } else if (errorMessage.includes('CORS') || errorMessage.includes('Access-Control')) {
+            errorMessage = 'CORS error: Backend API CORS not configured correctly. Please check Core API CORS settings.'
+          } else if (errorMessage.includes('404')) {
+            errorMessage = 'API endpoint not found. Please check if Core API is running and endpoint exists.'
+          }
         }
         
+        setError(new Error(errorMessage))
         setIsConnected(false)
         
-        // Attempt reconnection with exponential backoff
-        if (reconnectAttemptsRef.current < maxReconnectAttempts) {
+        // Attempt reconnection with exponential backoff (only in dev mode or if explicitly configured)
+        if (import.meta.env.DEV && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++
           const backoffDelay = Math.min(reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
           reconnectTimeoutRef.current = setTimeout(() => {
             fetchData()
           }, backoffDelay)
-        } else {
-          setError(new Error('Max reconnection attempts reached. Please check if Core API is running.'))
+        } else if (!import.meta.env.DEV && reconnectAttemptsRef.current < 3) {
+          // In production, only try 3 times
+          reconnectAttemptsRef.current++
+          reconnectTimeoutRef.current = setTimeout(() => {
+            fetchData()
+          }, reconnectInterval * 2)
         }
       }
     }
