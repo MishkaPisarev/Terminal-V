@@ -47,10 +47,20 @@ export function useNexusStream(
     if (!apiUrl || !isMountedRef.current) return
     
     try {
-      const response = await fetch(`${apiUrl}/api/aggregated?symbol=BTCUSD`)
+      const response = await fetch(`${apiUrl}/api/aggregated?symbol=BTCUSD`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'omit',
+      })
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
+      
       const aggregatedData = await response.json() as AggregatedData
       
       if (isMountedRef.current) {
@@ -61,15 +71,28 @@ export function useNexusStream(
       }
     } catch (err) {
       if (isMountedRef.current) {
-        setError(err instanceof Error ? err : new Error('Failed to fetch data'))
+        const errorMessage = err instanceof Error 
+          ? err.message 
+          : 'Failed to fetch data'
+        
+        // Check if it's a CORS error
+        if (errorMessage.includes('CORS') || errorMessage.includes('fetch')) {
+          setError(new Error('CORS error: Backend API may not be running or CORS not configured. Please start Core API server.'))
+        } else {
+          setError(new Error(errorMessage))
+        }
+        
         setIsConnected(false)
         
-        // Attempt reconnection
+        // Attempt reconnection with exponential backoff
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++
+          const backoffDelay = Math.min(reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
           reconnectTimeoutRef.current = setTimeout(() => {
             fetchData()
-          }, reconnectInterval)
+          }, backoffDelay)
+        } else {
+          setError(new Error('Max reconnection attempts reached. Please check if Core API is running.'))
         }
       }
     }

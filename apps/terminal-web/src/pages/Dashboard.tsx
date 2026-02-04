@@ -30,10 +30,18 @@ export const Dashboard = memo(function Dashboard() {
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4">
-            <div className="text-red-500 font-mono text-sm">
+          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4 space-y-2">
+            <div className="text-red-500 font-mono text-sm font-bold">
               ERROR: {error.message}
             </div>
+            {(error.message.includes('CORS') || error.message.includes('Backend API')) && (
+              <div className="text-yellow-400 font-mono text-xs mt-2 space-y-1">
+                <div>💡 To fix this:</div>
+                <div>1. Start Core API server: <code className="bg-black/30 px-1 rounded">cd apps/core-api && poetry run uvicorn core_api.main:app --reload</code></div>
+                <div>2. Or deploy Core API to production and set VITE_API_URL in GitHub Secrets</div>
+                <div>3. Check that API is accessible at: <code className="bg-black/30 px-1 rounded">{import.meta.env.VITE_API_URL || 'http://localhost:8000'}</code></div>
+              </div>
+            )}
           </div>
         )}
 

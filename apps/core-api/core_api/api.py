@@ -12,13 +12,15 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Enable CORS
+# Enable CORS with explicit headers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Session for HTTP requests
@@ -39,6 +41,12 @@ async def shutdown():
     global _session
     if _session and not _session.closed:
         await _session.close()
+
+
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle OPTIONS requests for CORS preflight"""
+    return {"status": "ok"}
 
 
 @app.get("/health")
